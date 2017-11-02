@@ -17,7 +17,7 @@ func main() {
 	accountKey := flag.String("accountkey", "", "Storage account key")
 	containerName := flag.String("containername", "", "The name of the container to upload to")
 	fileName := flag.String("filename", "", "The name of the file to upload ")
-
+	targetName := flag.String("targetname", "", "The name of the blob")
 	flag.Parse()
 	if *accountName == "" {
 		fmt.Println("Using account name from environment")
@@ -43,7 +43,10 @@ func main() {
 	container := blobClinet.GetContainerReference(*containerName)
 
 	file, _ := os.Open(*fileName)
-	blob := container.GetBlobReference(*fileName)
+	if *targetName == "" {
+		targetName = fileName
+	}
+	blob := container.GetBlobReference(*targetName)
 	fmt.Println("Start uploading file")
 	blob.CreateBlockBlobFromReader(file, nil)
 	fmt.Println("Done uploading file")
@@ -54,7 +57,7 @@ func getEnvVarOrExit(varName string) *string {
 	value := os.Getenv(varName)
 	if value == "" {
 		fmt.Printf("Missing environment variable %s\n", varName)
-		fmt.Println("Set enviroment variable or sepcify on CLI")
+		fmt.Println("Set environment variable or specify on CLI")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
