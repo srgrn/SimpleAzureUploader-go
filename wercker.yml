@@ -36,6 +36,6 @@ build:
     - script:
         name: go build
         code: |
-          GOOS=linux GOARCH=amd64 go build azure-uploader.go -o build/azure-uploader-linux
-          GOOS=darwin GOARCH=amd64 go build azure-uploader.go -o build/azure-uploader-osx
-          GOOS=windows GOARCH=amd64 go build azure-uploader.go -o build/azure-uploader-win.exe
+          GOOS=linux GOARCH=amd64 go build -o build/azure-uploader-linux azure-uploader.go
+          GOOS=darwin GOARCH=amd64 go build -o build/azure-uploader-osx azure-uploader.go
+          GOOS=windows GOARCH=amd64 go build -o build/azure-uploader-win.exe azure-uploader.go
