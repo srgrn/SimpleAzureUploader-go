@@ -7,9 +7,9 @@ import (
 	"fmt"
 	// "io/ioutil"
 	// "math/rand"
-	"os"
-
 	"github.com/Azure/azure-sdk-for-go/storage"
+	"os"
+	// "strings"
 )
 
 func main() {
@@ -18,6 +18,7 @@ func main() {
 	containerName := flag.String("containername", "", "The name of the container to upload to")
 	fileName := flag.String("filename", "", "The name of the file to upload ")
 	targetName := flag.String("targetname", "", "The name of the blob")
+	contentType := flag.String("contenttype", "application/octet-stream", "The name of the blob")
 	flag.Parse()
 	if *accountName == "" {
 		fmt.Println("Using account name from environment")
@@ -29,27 +30,34 @@ func main() {
 	}
 	if *containerName == "" {
 		fmt.Println("Using container name from environment")
-		accountName = getEnvVarOrExit("CONTAINER_NAME")
+		containerName = getEnvVarOrExit("CONTAINER_NAME")
 	}
 
 	if *fileName == "" {
 		fmt.Printf("Missing filename")
 		os.Exit(1)
 	}
-	client, _ := storage.NewBasicClient(*accountName, *accountKey)
+	client, err := storage.NewBasicClient(*accountName, *accountKey)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 	blobClinet := client.GetBlobService()
 
 	container := blobClinet.GetContainerReference(*containerName)
-
 	file, _ := os.Open(*fileName)
 	if *targetName == "" {
 		targetName = fileName
 	}
 	blob := container.GetBlobReference(*targetName)
-	fmt.Println("Start uploading file")
-	blob.CreateBlockBlobFromReader(file, nil)
-	fmt.Println("Done uploading file")
+	blob.Properties.ContentType = *contentType
+	err = blob.CreateBlockBlobFromReader(file, nil)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	fmt.Println("Done")
 }
 
 // getEnvVarOrExit returns the value of specified environment variable or terminates if it's not defined.
