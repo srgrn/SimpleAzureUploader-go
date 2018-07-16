@@ -30,7 +30,7 @@ build:
     - script:
         name: go get
         code: |
-          go get github.com/Azure/azure-sdk-for-go/storage
+          go get github.com/Azure/azure-sdk-for-go/storage github.com/lithammer/shortuuid
 
     # Build the project
     - script:
