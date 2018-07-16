@@ -2,14 +2,20 @@ package main
 
 import (
 	// "bytes"
-	// "encoding/base64"
+	"encoding/base64"
 	"flag"
 	"fmt"
-	// "io/ioutil"
+	"io"
 	// "math/rand"
 	"github.com/Azure/azure-sdk-for-go/storage"
 	"os"
 	// "strings"
+	"github.com/lithammer/shortuuid"
+)
+
+const (
+	KILO = 1024
+	MEGA = KILO * 1024
 )
 
 func main() {
@@ -46,18 +52,74 @@ func main() {
 	blobClinet := client.GetBlobService()
 
 	container := blobClinet.GetContainerReference(*containerName)
-	file, _ := os.Open(*fileName)
-	if *targetName == "" {
-		targetName = fileName
-	}
-	blob := container.GetBlobReference(*targetName)
-	blob.Properties.ContentType = *contentType
-	err = blob.CreateBlockBlobFromReader(file, nil)
+	// handle single file
+	err = HandleSingleFile(fileName, targetName, contentType, container)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
+}
+
+func HandleSingleFile(fileName, targetName, contentType *string, container *storage.Container) error {
+	file, _ := os.Open(*fileName)
+	// test for file size
+	defer file.Close()
+	if *targetName == "" {
+		targetName = fileName
+	}
+
+	blob := container.GetBlobReference(*targetName)
+	blob.Properties.ContentType = *contentType
+
+	stat, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	// if bigger than 250mb should upload by blocks
+	var bytes int64
+	bytes = stat.Size()
+	fmt.Println(bytes / MEGA)
+	if bytes > 256.0*MEGA {
+		blob.CreateBlockBlob(nil)
+		fmt.Println("File is bigger than allowed for single block")
+		buffer := make([]byte, 100*MEGA)
+		var blocks []storage.Block
+		for {
+			length, err := file.Read(buffer)
+			if err != nil {
+				if err != io.EOF {
+					return err
+				}
+				// fmt.Println("Should break")
+				break
+			}
+			// fmt.Println(len(buffer), length)
+			blockID := base64.StdEncoding.EncodeToString([]byte(shortuuid.New()))
+			err = blob.PutBlock(blockID, buffer[0:length], nil)
+			if err != nil {
+				// fmt.Println("create block failed")
+				return err
+			}
+			blocks = append(blocks, storage.Block{blockID, storage.BlockStatusUncommitted})
+		}
+		// uncommitted, err := blob.GetBlockList(storage.BlockListTypeUncommitted, nil)
+		// fmt.Println(uncommitted)
+		// fmt.Println(blocks)
+		err = blob.PutBlockList(blocks, nil)
+		if err != nil {
+			return err
+		}
+	} else {
+		fmt.Println("File can be uploaded as single block")
+		err := blob.CreateBlockBlobFromReader(file, nil)
+		if err != nil {
+			return err
+		}
+	}
+
 	fmt.Println("Done")
+	return nil
 }
 
 // getEnvVarOrExit returns the value of specified environment variable or terminates if it's not defined.
