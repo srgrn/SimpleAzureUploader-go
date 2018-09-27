@@ -6,16 +6,20 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	// "math/rand"
-	"github.com/Azure/azure-sdk-for-go/storage"
+	"sync"
+	"time"
+
 	"os"
+
+	"github.com/Azure/azure-sdk-for-go/storage"
+
 	// "strings"
 	"github.com/lithammer/shortuuid"
 )
 
 const (
-	KILO = 1024
-	MEGA = KILO * 1024
+	kilo = 1024
+	mega = kilo * 1024
 )
 
 func main() {
@@ -53,15 +57,17 @@ func main() {
 
 	container := blobClinet.GetContainerReference(*containerName)
 	// handle single file
-	err = HandleSingleFile(fileName, targetName, contentType, container)
+	start := time.Now()
+	err = handleSingleFile(fileName, targetName, contentType, container)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	fmt.Println(time.Since(start))
 
 }
 
-func HandleSingleFile(fileName, targetName, contentType *string, container *storage.Container) error {
+func handleSingleFile(fileName, targetName, contentType *string, container *storage.Container) error {
 	file, _ := os.Open(*fileName)
 	// test for file size
 	defer file.Close()
@@ -79,11 +85,12 @@ func HandleSingleFile(fileName, targetName, contentType *string, container *stor
 	// if bigger than 250mb should upload by blocks
 	var bytes int64
 	bytes = stat.Size()
-	fmt.Println(bytes / MEGA)
-	if bytes > 256.0*MEGA {
+	fmt.Println(bytes / mega)
+	if bytes > 256.0*mega {
+		var wg sync.WaitGroup
 		blob.CreateBlockBlob(nil)
 		fmt.Println("File is bigger than allowed for single block")
-		buffer := make([]byte, 100*MEGA)
+		buffer := make([]byte, 100*mega)
 		var blocks []storage.Block
 		for {
 			length, err := file.Read(buffer)
@@ -96,16 +103,22 @@ func HandleSingleFile(fileName, targetName, contentType *string, container *stor
 			}
 			// fmt.Println(len(buffer), length)
 			blockID := base64.StdEncoding.EncodeToString([]byte(shortuuid.New()))
-			err = blob.PutBlock(blockID, buffer[0:length], nil)
-			if err != nil {
-				// fmt.Println("create block failed")
-				return err
-			}
-			blocks = append(blocks, storage.Block{blockID, storage.BlockStatusUncommitted})
+			wg.Add(1)
+			go func(blockID string, buffer []byte, length int) {
+				// fmt.Println("Working on block", blockID)
+				defer wg.Done()
+				// defer fmt.Println("Finsihed working on block", blockID)
+				err = blob.PutBlock(blockID, buffer[0:length], nil)
+				if err != nil {
+					fmt.Println("create block failed ", blockID)
+				}
+			}(blockID, buffer, length)
+			blocks = append(blocks, storage.Block{ID: blockID, Status: storage.BlockStatusUncommitted})
 		}
 		// uncommitted, err := blob.GetBlockList(storage.BlockListTypeUncommitted, nil)
 		// fmt.Println(uncommitted)
 		// fmt.Println(blocks)
+		wg.Wait()
 		err = blob.PutBlockList(blocks, nil)
 		if err != nil {
 			return err
