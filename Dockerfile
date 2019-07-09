@@ -11,6 +11,9 @@ RUN dep ensure --vendor-only
 COPY . ./
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix nocgo -o /azure-uploader .
 
-FROM scratch
+FROM alpine:latest
+
+RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
+
 COPY --from=builder /azure-uploader ./
-ENTRYPOINT ["./azure-uploader"]
+ENTRYPOINT ["/azure-uploader"]
